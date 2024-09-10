@@ -5,6 +5,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatForm = document.getElementById('chat-form');
     const chatMessages = document.getElementById('chat-messages');
     const userInput = document.getElementById('user-input');
+    const sessionList = document.getElementById('session-list');
+
+    loadPreviousSessions();
 
     uploadForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -21,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 sessionId = result.session_id;
                 alert('Video uploaded successfully. You can now start chatting!');
                 document.getElementById('chat-section').style.display = 'block';
+                loadPreviousSessions();
             } else {
                 alert(`Error: ${result.error}`);
             }
@@ -65,5 +69,39 @@ document.addEventListener('DOMContentLoaded', () => {
         messageElement.textContent = text;
         chatMessages.appendChild(messageElement);
         chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    async function loadPreviousSessions() {
+        try {
+            const response = await fetch('/get_sessions');
+            const sessions = await response.json();
+            
+            sessionList.innerHTML = '';
+            sessions.forEach(session => {
+                const li = document.createElement('li');
+                li.textContent = `Session ${session.id} - ${new Date(session.created_at).toLocaleString()}`;
+                li.addEventListener('click', () => loadSession(session.session_id));
+                sessionList.appendChild(li);
+            });
+        } catch (error) {
+            console.error('Error loading previous sessions:', error);
+        }
+    }
+
+    async function loadSession(selectedSessionId) {
+        sessionId = selectedSessionId;
+        chatMessages.innerHTML = '';
+        document.getElementById('chat-section').style.display = 'block';
+
+        try {
+            const response = await fetch(`/get_session_messages/${sessionId}`);
+            const messages = await response.json();
+            
+            messages.forEach(message => {
+                addMessage(message.role === 'user' ? 'user' : 'ai', message.content);
+            });
+        } catch (error) {
+            console.error('Error loading session messages:', error);
+        }
     }
 });
