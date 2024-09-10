@@ -1,9 +1,21 @@
 import os
 import mimetypes
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
+from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 import google.generativeai as genai
+from models import User, get_user, create_user
 
 app = Flask(__name__)
+app.secret_key = os.urandom(24)  # Set a secret key for session management
+
+# Configure Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return get_user(user_id)
 
 # Configure Gemini AI
 genai.configure(api_key=os.environ["GEMINI_API_KEY"])
@@ -29,11 +41,54 @@ def upload_to_gemini(file_path, mime_type):
     file = genai.upload_file(file_path, mime_type=mime_type)
     return file
 
+def wait_for_files_active(files):
+    """Waits for the given files to be active."""
+    for file in files:
+        while file.state.name == "PROCESSING":
+            time.sleep(1)
+        if file.state.name != "ACTIVE":
+            raise Exception(f"File {file.name} failed to process")
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        user = next((u for u in get_user.values() if u.username == username), None)
+        if user and user.check_password(password):
+            login_user(user)
+            flash('Logged in successfully.')
+            return redirect(url_for('index'))
+        flash('Invalid username or password')
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('Logged out successfully.')
+    return redirect(url_for('index'))
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        if next((u for u in get_user.values() if u.username == username), None):
+            flash('Username already exists')
+        else:
+            user = create_user(username, password)
+            login_user(user)
+            flash('Registered and logged in successfully.')
+            return redirect(url_for('index'))
+    return render_template('register.html')
+
 @app.route('/upload', methods=['POST'])
+@login_required
 def upload_video():
     if 'video' not in request.files:
         return jsonify({'error': 'No video file provided'}), 400
@@ -56,6 +111,9 @@ def upload_video():
         # Upload to Gemini
         gemini_file = upload_to_gemini(temp_path, mime_type)
 
+        # Wait for the file to be active
+        wait_for_files_active([gemini_file])
+
         # Start a new chat session
         chat_session = model.start_chat(history=[
             {
@@ -66,7 +124,7 @@ def upload_video():
 
         # Store the chat session
         session_id = os.urandom(16).hex()
-        chat_sessions[session_id] = chat_session
+        chat_sessions[session_id] = {'session': chat_session, 'user_id': current_user.id}
 
         return jsonify({'message': 'Video uploaded successfully', 'session_id': session_id}), 200
     except Exception as e:
@@ -76,6 +134,7 @@ def upload_video():
         os.remove(temp_path)
 
 @app.route('/chat', methods=['POST'])
+@login_required
 def chat():
     data = request.json
     session_id = data.get('session_id')
@@ -84,11 +143,11 @@ def chat():
     if not session_id or not message:
         return jsonify({'error': 'Missing session_id or message'}), 400
 
-    if session_id not in chat_sessions:
+    if session_id not in chat_sessions or chat_sessions[session_id]['user_id'] != current_user.id:
         return jsonify({'error': 'Invalid session_id'}), 400
 
     try:
-        chat_session = chat_sessions[session_id]
+        chat_session = chat_sessions[session_id]['session']
         response = chat_session.send_message(message)
         return jsonify({'response': response.text}), 200
     except Exception as e:

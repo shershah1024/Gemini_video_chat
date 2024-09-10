@@ -9,22 +9,38 @@
 <body>
     <h1>Video Chat with Gemini AI</h1>
     
-    <div id="upload-section">
-        <h2>Upload Video</h2>
-        <form id="upload-form" enctype="multipart/form-data">
-            <input type="file" id="video-upload" name="video" accept="video/*" required>
-            <button type="submit" id="upload-btn">Upload</button>
-        </form>
-    </div>
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            <ul class="flashes">
+                {% for message in messages %}
+                    <li>{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    {% endwith %}
 
-    <div id="chat-section" style="display: none;">
-        <h2>Chat</h2>
-        <div id="chat-messages"></div>
-        <form id="chat-form">
-            <input type="text" id="user-input" placeholder="Type your message..." required>
-            <button type="submit" id="send-btn">Send</button>
-        </form>
-    </div>
+    {% if current_user.is_authenticated %}
+        <p>Welcome, {{ current_user.username }}! <a href="{{ url_for('logout') }}">Logout</a></p>
+        
+        <div id="upload-section">
+            <h2>Upload Video</h2>
+            <form id="upload-form" enctype="multipart/form-data">
+                <input type="file" id="video-upload" name="video" accept="video/*" required>
+                <button type="submit" id="upload-btn">Upload</button>
+            </form>
+        </div>
+
+        <div id="chat-section" style="display: none;">
+            <h2>Chat</h2>
+            <div id="chat-messages"></div>
+            <form id="chat-form">
+                <input type="text" id="user-input" placeholder="Type your message..." required>
+                <button type="submit" id="send-btn">Send</button>
+            </form>
+        </div>
+    {% else %}
+        <p>Please <a href="{{ url_for('login') }}">login</a> or <a href="{{ url_for('register') }}">register</a> to use the video chat feature.</p>
+    {% endif %}
 
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
