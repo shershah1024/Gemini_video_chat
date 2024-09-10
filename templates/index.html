@@ -9,8 +9,6 @@
 <body>
     <h1>Video Chat with Gemini AI</h1>
     
-    <p>Welcome, {{ current_user.username }}! <a href="{{ url_for('logout') }}">Logout</a> | <a href="{{ url_for('video_gallery') }}">Video Gallery</a></p>
-    
     <div id="upload-section">
         <h2>Upload Video</h2>
         <form id="upload-form" enctype="multipart/form-data">
@@ -26,16 +24,6 @@
             <input type="text" id="user-input" placeholder="Type your message..." required>
             <button type="submit" id="send-btn">Send</button>
         </form>
-    </div>
-
-    <div id="previous-sessions">
-        <h2>Previous Chat Sessions</h2>
-        <ul id="session-list"></ul>
-    </div>
-
-    <div id="loading-indicator">
-        <div class="spinner"></div>
-        <p>Loading...</p>
     </div>
 
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
