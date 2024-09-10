@@ -38,6 +38,7 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     chat_sessions = db.relationship('ChatSession', backref='user', lazy=True)
+    videos = db.relationship('Video', backref='user', lazy=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -51,6 +52,7 @@ class ChatSession(db.Model):
     session_id = db.Column(db.String(32), unique=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     messages = db.relationship('ChatMessage', backref='chat_session', lazy=True, cascade='all, delete-orphan')
+    video_id = db.Column(db.Integer, db.ForeignKey('video.id'), nullable=False)
 
 class ChatMessage(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -58,6 +60,14 @@ class ChatMessage(db.Model):
     role = db.Column(db.String(10), nullable=False)
     content = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Video(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    mime_type = db.Column(db.String(255), nullable=False)
+    upload_date = db.Column(db.DateTime, default=datetime.utcnow)
+    chat_sessions = db.relationship('ChatSession', backref='video', lazy=True)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -118,22 +128,39 @@ def logout():
 @app.route('/upload', methods=['POST'])
 @login_required
 def upload_video():
-    if 'video' not in request.files:
-        return jsonify({'error': 'No video file provided'}), 400
-
-    video = request.files['video']
-    if video.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
-
-    # Save the video temporarily
-    temp_path = f"/tmp/{video.filename}"
-    video.save(temp_path)
-
-    # Get MIME type
-    mime_type, _ = mimetypes.guess_type(temp_path)
-    if not mime_type or not mime_type.startswith('video/'):
-        os.remove(temp_path)
-        return jsonify({'error': 'Invalid video file'}), 400
+    video_id = request.form.get('video_id')
+    
+    if video_id:
+        # Starting a new chat session for an existing video
+        video = Video.query.get(video_id)
+        if not video or video.user_id != current_user.id:
+            return jsonify({'error': 'Invalid video ID'}), 400
+        
+        temp_path = f"/tmp/{video.filename}"
+        mime_type = video.mime_type
+    elif 'video' in request.files:
+        # Uploading a new video
+        video = request.files['video']
+        if video.filename == '':
+            return jsonify({'error': 'No selected file'}), 400
+        
+        # Save the video temporarily
+        temp_path = f"/tmp/{video.filename}"
+        video.save(temp_path)
+        
+        # Get MIME type
+        mime_type, _ = mimetypes.guess_type(temp_path)
+        if not mime_type or not mime_type.startswith('video/'):
+            os.remove(temp_path)
+            return jsonify({'error': 'Invalid video file'}), 400
+        
+        # Save video information to the database
+        new_video = Video(user_id=current_user.id, filename=video.filename, mime_type=mime_type)
+        db.session.add(new_video)
+        db.session.commit()
+        video_id = new_video.id
+    else:
+        return jsonify({'error': 'No video file or video ID provided'}), 400
 
     try:
         # Upload to Gemini
@@ -149,16 +176,17 @@ def upload_video():
 
         # Store the chat session
         session_id = os.urandom(16).hex()
-        db_chat_session = ChatSession(user_id=current_user.id, session_id=session_id)
+        db_chat_session = ChatSession(user_id=current_user.id, session_id=session_id, video_id=video_id)
         db.session.add(db_chat_session)
         db.session.commit()
 
-        return jsonify({'message': 'Video uploaded successfully', 'session_id': session_id}), 200
+        return jsonify({'message': 'Chat session started successfully', 'session_id': session_id}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     finally:
-        # Clean up the temporary file
-        os.remove(temp_path)
+        # Clean up the temporary file if it was a new upload
+        if 'video' in request.files:
+            os.remove(temp_path)
 
 @app.route('/chat', methods=['POST'])
 @login_required
@@ -206,7 +234,8 @@ def get_sessions():
         {
             'id': session.id,
             'session_id': session.session_id,
-            'created_at': session.created_at.isoformat()
+            'created_at': session.created_at.isoformat(),
+            'video_filename': session.video.filename
         }
         for session in sessions
     ])
@@ -227,6 +256,12 @@ def get_session_messages(session_id):
         }
         for message in messages
     ])
+
+@app.route('/video_gallery')
+@login_required
+def video_gallery():
+    videos = Video.query.filter_by(user_id=current_user.id).order_by(Video.upload_date.desc()).all()
+    return render_template('video_gallery.html', videos=videos)
 
 if __name__ == "__main__":
     with app.app_context():

@@ -24,16 +24,18 @@ h1 {
     margin-bottom: 10px;
 }
 
-#upload-btn, #send-btn {
+#upload-btn, #send-btn, .start-chat-btn {
     background-color: #4CAF50;
     color: white;
     padding: 10px 15px;
     border: none;
     border-radius: 4px;
     cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
 }
 
-#upload-btn:hover, #send-btn:hover {
+#upload-btn:hover, #send-btn:hover, .start-chat-btn:hover {
     background-color: #45a049;
 }
 
@@ -64,4 +66,56 @@ h1 {
 
 .ai-message {
     background-color: #f0f4c3;
+}
+
+#loading-indicator {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0, 0, 0, 0.5);
+    color: white;
+    padding: 20px;
+    border-radius: 5px;
+    z-index: 1000;
+}
+
+.spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 10px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Video Gallery Styles */
+.video-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+.video-item {
+    background-color: white;
+    padding: 15px;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.video-item h3 {
+    margin-top: 0;
+    font-size: 1.1em;
+}
+
+.video-item p {
+    font-size: 0.9em;
+    color: #666;
 }
